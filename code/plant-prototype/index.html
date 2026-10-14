@@ -1,33 +1,169 @@
+
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
     <title>Digital Plant Prototype</title>
 
     <style>
-        html,
-        body {
+        * {
+            box-sizing: border-box;
+        }
+
+        html, body {
             width: 100%;
             height: 100%;
             margin: 0;
-            padding: 0;
             overflow: hidden;
-            background: black;
+            background: #101612;
+            color: #edf4ed;
+            font-family: Arial, sans-serif;
         }
 
         canvas {
             display: block;
+        }
+
+        #controls {
+            position: fixed;
+            top: 18px;
+            left: 18px;
+            z-index: 10;
+            width: 245px;
+            padding: 18px;
+            background: rgba(22, 34, 26, 0.94);
+            border: 1px solid #405b45;
+            border-radius: 14px;
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.25);
+        }
+
+        h1 {
+            margin: 0 0 5px;
+            font-size: 20px;
+            letter-spacing: 1px;
+        }
+
+        .subtitle {
+            margin-bottom: 20px;
+            color: #a8bdaa;
+            font-size: 12px;
+        }
+
+        .control {
+            margin: 17px 0;
+        }
+
+        .control-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 9px;
+            font-size: 14px;
+        }
+
+        output {
+            color: #a9dba9;
+            font-weight: bold;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            accent-color: #78bb7d;
+            cursor: pointer;
+        }
+
+        .status-card {
+            margin-top: 20px;
+            padding: 12px;
+            background: #293a2d;
+            border-radius: 9px;
+        }
+
+        .status-label {
+            color: #b4c7b5;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        #status {
+            margin-top: 6px;
+            font-size: 15px;
+            font-weight: bold;
+        }
+
+        #health-track {
+            height: 6px;
+            margin-top: 10px;
+            overflow: hidden;
+            background: #101912;
+            border-radius: 4px;
+        }
+
+        #health-bar {
+            width: 80%;
+            height: 100%;
+            background: #81c784;
+            transition: width 0.2s;
+        }
+
+        #instructions {
+            margin-top: 15px;
+            color: #b4c7b5;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        @media (max-width: 480px) {
+            #controls {
+                top: 10px;
+                left: 10px;
+                width: 205px;
+                padding: 13px;
+            }
         }
     </style>
 </head>
 
 <body>
 
-<script type="module">
+<div id="controls">
+    <h1>DIGITAL PLANT</h1>
+    <div class="subtitle">Interactive plant prototype</div>
 
+    <div class="control">
+        <div class="control-header">
+            <label for="water">Water</label>
+            <output id="water-value">65%</output>
+        </div>
+        <input id="water" type="range" min="0" max="100"
+               value="65" step="5">
+    </div>
+
+    <div class="control">
+        <div class="control-header">
+            <label for="light">Light</label>
+            <output id="light-value">70%</output>
+        </div>
+        <input id="light" type="range" min="0" max="100"
+               value="70" step="5">
+    </div>
+
+    <div class="status-card">
+        <div class="status-label">Plant condition</div>
+        <div id="status">Healthy</div>
+        <div id="health-track">
+            <div id="health-bar"></div>
+        </div>
+    </div>
+
+    <div id="instructions">
+        Click on a leaf to grow a new one.
+        Adjust water and light to influence growth and plant condition.
+    </div>
+</div>
+
+<script type="module">
 import * as THREE from
     'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
 
@@ -37,6 +173,7 @@ import * as THREE from
 // =========================
 
 const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x101612);
 
 
 // =========================
@@ -44,7 +181,6 @@ const scene = new THREE.Scene();
 // =========================
 
 const plantGroup = new THREE.Group();
-
 scene.add(plantGroup);
 
 
@@ -70,30 +206,56 @@ const renderer = new THREE.WebGLRenderer({
     antialias: true
 });
 
+renderer.setPixelRatio(
+    Math.min(window.devicePixelRatio, 2)
+);
+
 renderer.setSize(
     window.innerWidth,
     window.innerHeight
 );
 
-document.body.appendChild(
-    renderer.domElement
-);
+document.body.appendChild(renderer.domElement);
+
+
+// =========================
+// PLANT STATE
+// =========================
+
+let water = 65;
+let light = 70;
+let health = 80;
+
+const growingLeaves = [];
+const allLeaves = [];
+
+// =========================
+// WITHERING AND RECOVERY
+// =========================
+
+const leafRestRotations = new Map();
+const leafDroopAmounts = new Map();
+
+let plantStress = 0;
+
+const healthyGreen = new THREE.Color(0x4f9d69);
+const dryBrown = new THREE.Color(0x956b46);
+const highlightedGreen = new THREE.Color(0x7fdc8f);
+
+const clock = new THREE.Clock();
 
 
 // =========================
 // STEM
 // =========================
 
-const stemGeometry = new THREE.CylinderGeometry(
-    0.22,
-    0.32,
-    4.5,
-    16
-);
-
 const stemMaterial = new THREE.MeshBasicMaterial({
-    color: 0x3f8f5f
+    color: healthyGreen.clone()
 });
+
+const stemGeometry = new THREE.CylinderGeometry(
+    0.22, 0.32, 4.5, 16
+);
 
 const stem = new THREE.Mesh(
     stemGeometry,
@@ -104,98 +266,66 @@ plantGroup.add(stem);
 
 
 // =========================
-// LEAF MATERIAL
+// CREATE LEAF
 // =========================
 
-const leafMaterial = new THREE.MeshBasicMaterial({
-    color: 0x4f9d69,
-    side: THREE.DoubleSide
-});
-
-
-// =========================
-// LEAF SHAPE
-// =========================
-
-function createLeaf(
-    x,
-    y,
-    z,
-    size,
-    rotationZ
-) {
-
+function createLeaf(x, y, z, size, rotationZ) {
     const shape = new THREE.Shape();
 
-    // Narrow base
     shape.moveTo(0, 0);
 
-    // Left side
     shape.bezierCurveTo(
         -0.15, 0.35,
         -0.75, 0.65,
         -0.95, 1.25
     );
 
-    // Toward tip
     shape.bezierCurveTo(
         -0.65, 1.85,
         -0.25, 2.25,
         0, 2.6
     );
 
-    // Right side
     shape.bezierCurveTo(
         0.25, 2.25,
         0.65, 1.85,
         0.95, 1.25
     );
 
-    // Back to base
     shape.bezierCurveTo(
         0.75, 0.65,
         0.15, 0.35,
         0, 0
     );
 
+    const geometry = new THREE.ExtrudeGeometry(shape, {
+        depth: 0.10,
+        bevelEnabled: true,
+        bevelThickness: 0.025,
+        bevelSize: 0.025,
+        bevelSegments: 2
+    });
 
-    // 3D leaf
-    const geometry = new THREE.ExtrudeGeometry(
-        shape,
-        {
-            depth: 0.10,
-            bevelEnabled: true,
-            bevelThickness: 0.025,
-            bevelSize: 0.025,
-            bevelSegments: 2
-        }
-    );
+    const material = new THREE.MeshBasicMaterial({
+        color: healthyGreen.clone(),
+        side: THREE.DoubleSide
+    });
 
+    const leaf = new THREE.Mesh(geometry, material);
 
-    const leaf = new THREE.Mesh(
-        geometry,
-        leafMaterial.clone()
-    );
-
-
-    leaf.scale.set(
-        size,
-        size,
-        size
-    );
-
-    leaf.position.set(
-        x,
-        y,
-        z
-    );
-
+    leaf.scale.set(size, size, size);
+    leaf.position.set(x, y, z);
     leaf.rotation.z = rotationZ;
-
+    // Save the leaf's natural position
+    leafRestRotations.set(leaf, rotationZ);
+    leafDroopAmounts.set(leaf, 0);
     leaf.rotation.x = 0.15;
+    leaf.userData.originalRotationX = leaf.rotation.x;
 
+    leaf.userData.baseColor = healthyGreen.clone();
 
     plantGroup.add(leaf);
+    allLeaves.push(leaf);
 
     return leaf;
 }
@@ -205,45 +335,138 @@ function createLeaf(
 // ORIGINAL LEAVES
 // =========================
 
-createLeaf(
-    -0.55,
-    -1.0,
-    0,
-    0.65,
-    0.8
-);
+createLeaf(-0.55, -1.0, 0, 0.65, 0.8);
+createLeaf( 0.55, -0.45, 0, 0.70, -0.8);
+createLeaf(-0.65,  0.2, 0, 0.75, 0.85);
+createLeaf( 0.65,  0.85, 0, 0.80, -0.85);
+createLeaf(-0.45,  1.35, 0, 0.60, 0.75);
 
-createLeaf(
-    0.55,
-    -0.45,
-    0,
-    0.7,
-    -0.8
-);
 
-createLeaf(
-    -0.65,
-    0.2,
-    0,
-    0.75,
-    0.85
-);
+// =========================
+// ENVIRONMENT CONTROLS
+// =========================
 
-createLeaf(
-    0.65,
-    0.85,
-    0,
-    0.8,
-    -0.85
-);
+const waterInput = document.getElementById('water');
+const lightInput = document.getElementById('light');
 
-createLeaf(
-    -0.45,
-    1.35,
-    0,
-    0.6,
-    0.75
-);
+waterInput.addEventListener('input', () => {
+    water = Number(waterInput.value);
+    document.getElementById('water-value').textContent =
+        water + '%';
+});
+
+lightInput.addEventListener('input', () => {
+    light = Number(lightInput.value);
+    document.getElementById('light-value').textContent =
+        light + '%';
+});
+
+
+// =========================
+// PLANT CONDITION
+// =========================
+
+function updateCondition(delta) {
+    // Simplified artistic simulation:
+    // very low water or light damages the plant.
+    // Moderate conditions allow recovery.
+
+    const severeStress = water < 25 || light < 25;
+    const extremeLevel = water > 95 || light > 95;
+
+    // Stress increases in poor conditions and decreases
+// when the environment becomes favourable.
+
+    if (severeStress) {
+    plantStress = Math.min(1, plantStress + delta * 0.12);
+    } else {
+    plantStress = Math.max(0, plantStress - delta * 0.04);
+    }
+
+    if (severeStress) {
+        health -= 3 * delta;
+    } else if (extremeLevel) {
+        health -= 0.8 * delta;
+    } else {
+        health += 0.8 * delta;
+    }
+
+    health = THREE.MathUtils.clamp(health, 0, 100);
+
+    let status;
+
+    if (health >= 60) {
+        status = 'Healthy';
+    } else if (health >= 30) {
+        status = 'Stressed';
+    } else if (health > 0) {
+        status = 'Withering';
+    } else {
+        status = 'Critical';
+    }
+
+    document.getElementById('status').textContent = status;
+    document.getElementById('health-bar').style.width =
+        health + '%';
+
+    const healthBar = document.getElementById('health-bar');
+
+    if (health >= 60) {
+        healthBar.style.background = '#81c784';
+    } else if (health >= 30) {
+        healthBar.style.background = '#e0b85c';
+    } else {
+        healthBar.style.background = '#bd795d';
+    }
+
+    // Change stem colour according to plant condition.
+   const dryness = 1 - health / 100;
+
+    // The stem changes colour only when the plant is stressed.
+    const visibleDryness = Math.max(0, (dryness - 0.3) / 0.7);
+
+    stemMaterial.color
+    .copy(healthyGreen)
+    .lerp(dryBrown, visibleDryness * 0.65);
+
+        // Gradually droop leaves under stress and restore them
+// when the plant recovers.
+
+// Gradually droop all leaves under stress
+// and restore them when the plant recovers.
+
+for (const leaf of allLeaves) {
+    const currentDroop = leafDroopAmounts.get(leaf) ?? 0;
+
+    const targetDroop = plantStress * 0.65;
+
+    const nextDroop = THREE.MathUtils.damp(
+        currentDroop,
+        targetDroop,
+        2,
+        delta
+    );
+
+    leafDroopAmounts.set(leaf, nextDroop);
+
+    // Rotate around each leaf's local X axis.
+    // This changes its tilt rather than its left/right direction.
+    const originalX = leaf.userData.originalRotationX ?? 0.15;
+
+    leaf.rotation.x = originalX + nextDroop;
+}
+
+    // Change the colour of every leaf.
+    for (const leaf of allLeaves) {
+        leaf.material.color
+            .copy(leaf.userData.baseColor)
+            .lerp(dryBrown, visibleDryness * 0.65);
+
+        if (leaf === selectedLeaf) {
+            leaf.material.color.lerp(highlightedGreen, 0.55);
+        }
+    }
+}
 
 
 // =========================
@@ -251,104 +474,56 @@ createLeaf(
 // =========================
 
 const raycaster = new THREE.Raycaster();
-
 const mouse = new THREE.Vector2();
 
 let selectedLeaf = null;
 
-let growingLeaves = [];
-
-
-// =========================
-// MOUSE CLICK
-// =========================
-
-window.addEventListener(
-    'click',
-    (event) => {
-
-        mouse.x =
-            (event.clientX / window.innerWidth) * 2 - 1;
-
-        mouse.y =
-            -(event.clientY / window.innerHeight) * 2 + 1;
-
-
-        raycaster.setFromCamera(
-            mouse,
-            camera
-        );
-
-
-        const intersects =
-            raycaster.intersectObjects(
-                plantGroup.children
-            );
-
-
-        if (intersects.length === 0) {
-            return;
-        }
-
-
-        const object =
-            intersects[0].object;
-
-
-        // Ignore stem
-        if (object === stem) {
-            return;
-        }
-
-
-        // Highlight clicked leaf
-
-        object.material.color.set(
-            0x7fdc8f
-        );
-
-
-        // =========================
-        // CREATE NEW LEAF
-        // =========================
-
-        const newX =
-            (Math.random() - 0.5) * 1.8;
-
-        const newY =
-            Math.random() * 3.5 - 1.3;
-
-        const newZ =
-            (Math.random() - 0.5) * 0.5;
-
-        const newRotation =
-            (Math.random() - 0.5) * 1.6;
-
-
-        const newLeaf =
-            createLeaf(
-                newX,
-                newY,
-                newZ,
-                0.01,
-                newRotation
-            );
-
-
-        // Target size
-
-        newLeaf.userData.targetScale =
-            0.55 + Math.random() * 0.25;
-
-
-        // Add to growing list
-
-        growingLeaves.push(
-            newLeaf
-        );
-
+window.addEventListener('click', (event) => {
+    // Do not treat clicks on the control panel as plant clicks.
+    if (event.target.closest('#controls')) {
+        return;
     }
-);
+
+    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+    raycaster.setFromCamera(mouse, camera);
+
+    const intersects = raycaster.intersectObjects(
+        allLeaves,
+        false
+    );
+
+    if (intersects.length === 0) {
+        return;
+    }
+
+    selectedLeaf = intersects[0].object;
+
+    // Growth is slower in poor conditions.
+    const newX = selectedLeaf.position.x +
+        (Math.random() - 0.5) * 1.2;
+
+    const newY = selectedLeaf.position.y +
+        (Math.random() - 0.5) * 1.0;
+
+    const newZ = (Math.random() - 0.5) * 0.5;
+
+    const newRotation = (Math.random() - 0.5) * 1.6;
+
+    const newLeaf = createLeaf(
+        newX,
+        newY,
+        newZ,
+        0.01,
+        newRotation
+    );
+
+    newLeaf.userData.targetScale =
+        0.45 + Math.random() * 0.30;
+
+    growingLeaves.push(newLeaf);
+});
 
 
 // =========================
@@ -356,50 +531,45 @@ window.addEventListener(
 // =========================
 
 function animate() {
+    requestAnimationFrame(animate);
 
-    requestAnimationFrame(
-        animate
-    );
+    const delta = Math.min(clock.getDelta(), 0.05);
 
+    // Rotate the plant.
+    plantGroup.rotation.y += 0.6 * delta;
 
-    // Rotate plant
+    // Water and light influence new leaf growth.
+    const conditions = Math.min(water, light) / 100;
 
-    plantGroup.rotation.y += 0.01;
+    const growthMultiplier =
+        0.2 + conditions * 1.3;
 
+    const healthMultiplier =
+        0.25 + (health / 100) * 0.75;
 
-    // =========================
-    // GROW NEW LEAVES
-    // =========================
+    for (const leaf of growingLeaves) {
+        const target = leaf.userData.targetScale;
 
-    growingLeaves.forEach(
-        (leaf) => {
+        if (leaf.scale.x < target) {
+            const nextScale = Math.min(
+                target,
+                leaf.scale.x +
+                    0.45 * delta *
+                    growthMultiplier *
+                    healthMultiplier
+            );
 
-            const target =
-                leaf.userData.targetScale;
-
-
-            if (leaf.scale.x < target) {
-
-                const newScale =
-                    leaf.scale.x + 0.02;
-
-
-                leaf.scale.set(
-                    newScale,
-                    newScale,
-                    newScale
-                );
-
-            }
-
+            leaf.scale.set(
+                nextScale,
+                nextScale,
+                nextScale
+            );
         }
-    );
+    }
 
+    updateCondition(delta);
 
-    renderer.render(
-        scene,
-        camera
-    );
+    renderer.render(scene, camera);
 }
 
 animate();
@@ -409,26 +579,18 @@ animate();
 // WINDOW RESIZE
 // =========================
 
-window.addEventListener(
-    'resize',
-    () => {
+window.addEventListener('resize', () => {
+    camera.aspect =
+        window.innerWidth / window.innerHeight;
 
-        camera.aspect =
-            window.innerWidth /
-            window.innerHeight;
+    camera.updateProjectionMatrix();
 
-        camera.updateProjectionMatrix();
-
-        renderer.setSize(
-            window.innerWidth,
-            window.innerHeight
-        );
-
-    }
-);
+    renderer.setSize(
+        window.innerWidth,
+        window.innerHeight
+    );
+});
 
 </script>
-
 </body>
-
 </html>
