@@ -127,9 +127,43 @@
 
 <body>
 
+    
+
+
+
 <div id="controls">
     <h1>DIGITAL PLANT</h1>
     <div class="subtitle">Interactive plant prototype</div>
+
+    <button id="plantSeedButton" style="
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 10px;
+    background: #4f9d69;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+">
+    Plant seed
+</button>
+<button id="collectSeedsButton" style="
+    display: none;
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 10px;
+    background: #b58b55;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+">
+    Collect seeds
+</button>
+
+
 
     <div class="control">
         <div class="control-header">
@@ -175,6 +209,76 @@ import * as THREE from
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x101612);
 
+// =========================
+// SOIL
+// =========================
+
+const soilGeometry = new THREE.SphereGeometry(1, 32, 16);
+
+const soilMaterial = new THREE.MeshBasicMaterial({
+    color: 0x59402b
+});
+
+const soil = new THREE.Mesh(
+    soilGeometry,
+    soilMaterial
+);
+
+soil.scale.set(2.5, 0.35, 1.2);
+soil.position.set(0, -1.8, 0);
+
+scene.add(soil);
+
+
+// =========================
+// SEED
+// =========================
+
+const seedGeometry = new THREE.SphereGeometry(
+    0.18,
+    24,
+    16
+);
+
+const seedMaterial = new THREE.MeshBasicMaterial({
+    color: 0x9b6b3e
+});
+
+const seed = new THREE.Mesh(
+    seedGeometry,
+    seedMaterial
+);
+
+seed.scale.set(0.75, 1.2, 0.65);
+seed.position.set(0, -1.3, 0);
+
+scene.add(seed);
+
+
+
+// =========================
+// PLANT SEED INTERACTION
+// =========================
+
+const plantSeedButton = document.getElementById(
+    'plantSeedButton'
+);
+
+const collectSeedsButton = document.getElementById(
+    'collectSeedsButton'
+);
+
+
+ console.log('Plant button found:', plantSeedButton);
+let seedIsPlanted = false;
+
+console.log('Connecting plant button handler');
+
+
+
+
+
+
 
 // =========================
 // PLANT GROUP
@@ -182,6 +286,14 @@ scene.background = new THREE.Color(0x101612);
 
 const plantGroup = new THREE.Group();
 scene.add(plantGroup);
+plantGroup.visible = false;
+plantGroup.scale.set(0.01, 0.01, 0.01);
+
+let germinationProgress = 0;
+let germinationStarted = false;
+
+
+
 
 
 // =========================
@@ -330,6 +442,207 @@ function createLeaf(x, y, z, size, rotationZ) {
     return leaf;
 }
 
+// NEW SPROUT
+const sproutGroup = new THREE.Group();
+sproutGroup.position.set(0, -1.55, 0);
+scene.add(sproutGroup);
+sproutGroup.visible = false;
+let continuedGrowth = 0;
+
+
+
+let seedsCollected = false;
+
+const sproutCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0, -0.15, 0),
+    new THREE.Vector3(0.02, 0.15, 0),
+    new THREE.Vector3(0.12, 0.40, 0),
+new THREE.Vector3(0.28, 0.50, 0)
+]);
+
+const sproutGeometry = new THREE.TubeGeometry(
+    sproutCurve, 20, 0.045, 8, false
+);
+
+const sproutMaterial = new THREE.MeshBasicMaterial({
+    color: 0x78bb7d
+});
+
+const sprout = new THREE.Mesh(sproutGeometry, sproutMaterial);
+sproutGroup.add(sprout);
+
+ // SIDE BRANCH
+const branchCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0.08, 0.20, 0),
+    new THREE.Vector3(0.18, 0.30, 0),
+    new THREE.Vector3(0.35, 0.34, 0),
+    new THREE.Vector3(0.48, 0.42, 0)
+]);
+
+const branchGeometry = new THREE.TubeGeometry(
+    branchCurve,
+    16,
+    0.018,
+    8,
+    false
+);
+
+const branchMaterial = new THREE.MeshBasicMaterial({
+    color: 0x78bb7d
+});
+
+const branch = new THREE.Mesh(
+    branchGeometry,
+    branchMaterial
+);
+
+branch.scale.set(0.001, 0.001, 0.001);
+sproutGroup.add(branch);
+
+ // FLOWER BUD
+const budGeometry = new THREE.SphereGeometry(0.09, 16, 12);
+
+const budMaterial = new THREE.MeshBasicMaterial({
+    color: 0x78bb7d
+});
+
+const bud = new THREE.Mesh(budGeometry, budMaterial);
+
+// Place the bud at the top of the main stem.
+const budTip = sproutCurve.getPointAt(1);
+bud.position.copy(budTip);
+bud.scale.set(0.001, 0.001, 0.001);
+
+sproutGroup.add(bud);
+
+
+ // FLOWER CENTER
+const flowerCenterGeometry = new THREE.SphereGeometry(
+    0.055, 12, 10
+);
+
+const flowerCenterMaterial = new THREE.MeshBasicMaterial({
+    color: 0xf2c14e
+});
+
+const flowerCenter = new THREE.Mesh(
+    flowerCenterGeometry,
+    flowerCenterMaterial
+);
+
+flowerCenter.scale.set(0.001, 0.001, 0.001);
+bud.add(flowerCenter);
+
+ // FLOWER PETALS
+const petalMaterial = new THREE.MeshBasicMaterial({
+    color: 0xe88bb5,
+    side: THREE.DoubleSide
+});
+
+const petalGeometry = new THREE.SphereGeometry(0.07, 12, 10);
+
+const petals = [];
+
+for (let i = 0; i < 6; i++) {
+    const petal = new THREE.Mesh(petalGeometry, petalMaterial);
+
+    petal.position.set(0, 0, 0);
+    petal.scale.set(0.001, 0.001, 0.001);
+
+    bud.add(petal);
+    petals.push(petal);
+}
+
+
+ // SEEDS
+const flowerSeedMaterial = new THREE.MeshBasicMaterial({
+    color: 0x8b6b3f
+});
+
+const flowerSeedGeometry = new THREE.SphereGeometry(0.018, 8, 6);
+const seeds = [];
+
+for (let i = 0; i < 5; i++) {
+    const seed = new THREE.Mesh(
+    flowerSeedGeometry,
+    flowerSeedMaterial
+);
+
+    seed.position.set(
+        Math.cos((i / 5) * Math.PI * 2) * 0.04,
+        Math.sin((i / 5) * Math.PI * 2) * 0.04,
+        0.02
+    );
+
+    seed.scale.set(0.001, 0.001, 0.001);
+
+    bud.add(seed);
+    seeds.push(seed);
+}
+
+
+
+// Get a point on the stem curve.
+function getStemPoint(t) {
+    return sproutCurve.getPointAt(t);
+}
+
+// FIRST TWO LEAVES
+function createSproutLeaf(x, y, rotationZ) {
+    const leafShape = new THREE.Shape();
+
+leafShape.moveTo(0, 0);
+leafShape.quadraticCurveTo(0.12, 0.02, 0.22, 0.10);
+leafShape.quadraticCurveTo(0.12, 0.16, 0, 0);
+
+const leafGeometry = new THREE.ShapeGeometry(leafShape);
+
+const leafMaterial = new THREE.MeshBasicMaterial({
+    color: 0x78bb7d,
+    side: THREE.DoubleSide
+});
+
+    const leaf = new THREE.Mesh(leafGeometry, leafMaterial);
+   leaf.scale.set(1.2, 0.55, 0.2);
+    leaf.position.set(x, y, 0);
+    leaf.rotation.z = rotationZ;
+    leaf.visible = false;
+
+    sproutGroup.add(leaf);
+    return leaf;
+}
+
+// Attach all three pairs of leaves to the stem curve.
+const leftLeafPoint1 = getStemPoint(0.45);
+const rightLeafPoint1 = getStemPoint(0.55);
+
+const leftLeafPoint2 = getStemPoint(0.65);
+const rightLeafPoint2 = getStemPoint(0.72);
+
+const leftLeafPoint3 = getStemPoint(0.82);
+const rightLeafPoint3 = getStemPoint(0.90);
+
+const sproutLeafLeft = createSproutLeaf(
+    leftLeafPoint1.x, leftLeafPoint1.y, 2.7
+);
+const sproutLeafRight = createSproutLeaf(
+    rightLeafPoint1.x, rightLeafPoint1.y, 0.3
+);
+
+const sproutLeafLeft2 = createSproutLeaf(
+    leftLeafPoint2.x, leftLeafPoint2.y, 2.7
+);
+const sproutLeafRight2 = createSproutLeaf(
+    rightLeafPoint2.x, rightLeafPoint2.y, 0.3
+);
+
+const sproutLeafLeft3 = createSproutLeaf(
+    leftLeafPoint3.x, leftLeafPoint3.y, 2.7
+);
+const sproutLeafRight3 = createSproutLeaf(
+    rightLeafPoint3.x, rightLeafPoint3.y, 0.3
+);
+
 
 // =========================
 // ORIGINAL LEAVES
@@ -351,8 +664,14 @@ const lightInput = document.getElementById('light');
 
 waterInput.addEventListener('input', () => {
     water = Number(waterInput.value);
+
     document.getElementById('water-value').textContent =
         water + '%';
+
+    if (seedIsPlanted && water >= 50) {
+        germinationStarted = true;
+        sproutGroup.visible = true;
+    }
 });
 
 lightInput.addEventListener('input', () => {
@@ -534,10 +853,266 @@ function animate() {
     requestAnimationFrame(animate);
 
     const delta = Math.min(clock.getDelta(), 0.05);
+    // The plant slowly consumes water after it is planted.
+if (seedIsPlanted && water > 0) {
+    water = Math.max(0, water - delta * 0.5);
+
+    waterInput.value = water;
+
+    document.getElementById('water-value').textContent =
+        Math.round(water) + '%';
+}
+        // Germination and continued growth.
+    if (germinationStarted) {
+        if (germinationProgress < 1) {
+            germinationProgress = Math.min(
+                1,
+                germinationProgress + delta * 0.2
+            );
+        }
+
+        const germinationScale = Math.max(0.01, germinationProgress);
+
+        
+        // Gradually unfold the first pair of leaves.
+        const leftLeafGrowth = THREE.MathUtils.clamp(
+            (germinationProgress - 0.45) * 5,
+            0,
+            1
+        );
+
+        const rightLeafGrowth = THREE.MathUtils.clamp(
+            (germinationProgress - 0.7) * 5,
+            0,
+            1
+        );
+
+        sproutLeafLeft.visible = leftLeafGrowth > 0;
+        sproutLeafRight.visible = rightLeafGrowth > 0;
+
+        sproutLeafLeft.scale.set(
+            1.2 * leftLeafGrowth,
+            0.55 * leftLeafGrowth,
+            0.2
+        );
+
+        sproutLeafRight.scale.set(
+            1.2 * rightLeafGrowth,
+            0.55 * rightLeafGrowth,
+            0.2
+        );
+
+        // Gradually unfold the second pair as the stem grows.
+        const secondPairGrowth = THREE.MathUtils.clamp(
+            (continuedGrowth - 0.2) / 0.25,
+            0,
+            1
+        );
+
+        sproutLeafLeft2.visible = secondPairGrowth > 0;
+        sproutLeafRight2.visible = secondPairGrowth > 0;
+
+        sproutLeafLeft2.scale.set(
+            1.2 * secondPairGrowth,
+            0.55 * secondPairGrowth,
+            0.2
+        );
+
+        sproutLeafRight2.scale.set(
+            1.2 * secondPairGrowth,
+            0.55 * secondPairGrowth,
+            0.2
+        );
+
+        // Gradually unfold the third pair later.
+        const thirdPairGrowth = THREE.MathUtils.clamp(
+            (continuedGrowth - 0.5) / 0.25,
+            0,
+            1
+        );
+
+        sproutLeafLeft3.visible = thirdPairGrowth > 0;
+        sproutLeafRight3.visible = thirdPairGrowth > 0;
+
+        sproutLeafLeft3.scale.set(
+            1.2 * thirdPairGrowth,
+            0.55 * thirdPairGrowth,
+            0.2
+        );
+
+        sproutLeafRight3.scale.set(
+            1.2 * thirdPairGrowth,
+            0.55 * thirdPairGrowth,
+            0.2
+        );
+
+
+        
+
+        sproutLeafRight.scale.set(
+            1.2 * rightLeafGrowth,
+            0.55 * rightLeafGrowth,
+            0.2
+        );
+
+        // After germination, enough water and light allow upward growth.
+        if (germinationProgress >= 1 && water >= 20 && light >= 20) {
+            continuedGrowth = Math.min(
+                4,
+                continuedGrowth + delta * 0.12 * (water / 100) * (light / 100)
+            );
+        }
+
+        
+        // The bud grows after the plant has developed.
+        const budGrowth = THREE.MathUtils.clamp(
+            (continuedGrowth - 1.2) / 0.8,
+            0,
+            1
+        );
+
+        const budScale = Math.max(0.001, budGrowth);
+
+        bud.scale.set(
+            budScale,
+            budScale,
+            budScale
+        );
+
+        
+       const flowerOpen = THREE.MathUtils.clamp(
+        (continuedGrowth - 2.0) / 0.8,
+        0,
+        1
+            );
+
+            // The flower slowly withers after producing seeds.
+        const witherProgress = THREE.MathUtils.clamp(
+            (continuedGrowth - 3.5) / 0.5,
+                0,
+                1
+        );
+
+        if (witherProgress >= 1 && !seedsCollected) {
+             collectSeedsButton.style.display = 'block';
+        }
+
+        petals.forEach((petal, index) => {
+            const angle = (index / petals.length) * Math.PI * 2;
+
+            petal.position.set(
+                Math.cos(angle) * 0.09 * flowerOpen,
+                Math.sin(angle) * 0.09 * flowerOpen,
+                0
+            );
+
+            const petalSize = flowerOpen * (1 - 0.75 * witherProgress);
+
+            petal.scale.set(
+                 Math.max(0.001, 0.001 + 0.9 * petalSize),
+                 Math.max(0.001, 0.001 + 0.55 * petalSize),
+                 0.3
+            );
+
+            petal.material.color
+                .set(0xe88bb5)
+                .lerp(new THREE.Color(0x806b70), witherProgress);
+        });
+
+                // The flower centre appears as the petals open.
+            const centerScale = THREE.MathUtils.clamp(
+            (flowerOpen - 0.5) / 0.5,
+            0,
+            1
+            );
+
+            flowerCenter.scale.setScalar(
+            Math.max(0.001, centerScale)
+            );
+
+                    // Seeds develop after the flower has fully opened.
+        const seedGrowth = THREE.MathUtils.clamp(
+            (flowerOpen - 0.8) / 0.2,
+            0,
+            1
+        );
+
+        seeds.forEach((seed, index) => {
+        const scale = Math.max(0.001, seedGrowth);
+
+        const angle = (index / seeds.length) * Math.PI * 2;
+
+        seed.position.set(
+            Math.cos(angle) * 0.045,
+            Math.sin(angle) * 0.045,
+            0.16
+        );
+
+        seed.scale.setScalar(0.35 * scale);
+        });
+
+            flowerCenter.position.set(0, 0, 0.08);
+
+        
+
+
+        
+        // Gradually grow the side branch.
+        const branchGrowth = THREE.MathUtils.clamp(
+            (continuedGrowth - 0.4) / 0.8,
+            0,
+            1
+        );
+
+        branch.scale.set(
+            branchGrowth,
+            branchGrowth,
+            branchGrowth
+        );
+
+
+        // First the whole sprout appears; later its height increases.
+        const stillGerminating = germinationProgress < 1;
+
+        sproutGroup.scale.set(
+            stillGerminating ? germinationScale : 1,
+            stillGerminating ? germinationScale : 1 + continuedGrowth,
+            stillGerminating ? germinationScale : 1
+        );
+
+        // Low health makes the sprout darker and its leaves droop.
+        const sproutDryness = 1 - health / 100;
+
+        const sproutColour = healthyGreen.clone().lerp(
+            dryBrown,
+            Math.max(0, (sproutDryness - 0.3) / 0.7) * 0.65
+        );
+
+        sproutMaterial.color.copy(sproutColour);
+        sproutLeafLeft.material.color.copy(sproutColour);
+        sproutLeafRight.material.color.copy(sproutColour);
+
+                // Leaves droop when the plant is stressed
+        // and lift back up when it recovers.
+        const droop = plantStress * 0.65;
+
+        sproutLeafLeft.rotation.z = 0.5 + droop;
+        sproutLeafRight.rotation.z = -0.5 - droop;
+
+        // Low water or light makes the leaves look dry.
+        const leafDryness = Math.max(0, (1 - health / 100 - 0.3) / 0.7);
+
+        const leafColour = healthyGreen.clone().lerp(
+            dryBrown,
+            leafDryness * 0.65
+        );
+
+        sproutLeafLeft.material.color.copy(leafColour);
+        sproutLeafRight.material.color.copy(leafColour);
+    }
 
     // Rotate the plant.
-    plantGroup.rotation.y += 0.6 * delta;
-
+    
     // Water and light influence new leaf growth.
     const conditions = Math.min(water, light) / 100;
 
@@ -571,6 +1146,54 @@ function animate() {
 
     renderer.render(scene, camera);
 }
+plantSeedButton.addEventListener('click', () => {
+    seed.position.y = -1.55;
+    seedIsPlanted = true;
+    plantSeedButton.textContent = 'Seed planted';
+    plantSeedButton.disabled = true;
+});
+
+collectSeedsButton.addEventListener('click', () => {
+    seedsCollected = true;
+    collectSeedsButton.style.display = 'none';
+
+    sproutGroup.visible = false;
+    sproutGroup.scale.set(0.01, 0.01, 0.01);
+
+    seed.position.y = -1.3;
+    seedIsPlanted = false;
+
+    germinationProgress = 0;
+    germinationStarted = false;
+    continuedGrowth = 0;
+
+    bud.scale.set(0.001, 0.001, 0.001);
+    flowerCenter.scale.set(0.001, 0.001, 0.001);
+
+    petals.forEach(petal => {
+        petal.scale.set(0.001, 0.001, 0.001);
+        petal.material.color.set(0xe88bb5);
+    });
+
+    seeds.forEach(seed => {
+        seed.scale.set(0.001, 0.001, 0.001);
+    });
+
+    branch.scale.set(0.001, 0.001, 0.001);
+
+    [
+        sproutLeafLeft, sproutLeafRight,
+        sproutLeafLeft2, sproutLeafRight2,
+        sproutLeafLeft3, sproutLeafRight3
+    ].forEach(leaf => {
+        leaf.visible = false;
+        leaf.scale.set(0, 0, 0.2);
+    });
+
+    plantSeedButton.disabled = false;
+    plantSeedButton.textContent = 'Plant seed';
+});
+
 
 animate();
 
