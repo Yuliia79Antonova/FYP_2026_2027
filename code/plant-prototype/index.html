@@ -218,6 +218,11 @@ const soilMaterial = new THREE.MeshBasicMaterial({
     color: 0x59402b
 });
 
+const drySoilColor = soilMaterial.color.clone();
+const wetSoilColor = new THREE.Color(0x342719);
+
+let soilWetness = 0;
+
 const soil = new THREE.Mesh(soilGeometry, soilMaterial);
 soil.scale.set(2.5, 0.35, 1.2);
 soil.position.set(0, -1.8, 0);
@@ -307,6 +312,487 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
+// =========================
+// SUNLIGHT ANIMATION
+// =========================
+
+let lightVisualStrength = 0;
+
+const sunlightGroup = new THREE.Group();
+sunlightGroup.position.set(2.2, 2.0, -0.5);
+scene.add(sunlightGroup);
+
+// Soft sunlight beam
+const sunlightShape = new THREE.Shape();
+
+sunlightShape.moveTo(-0.10, -0.05);
+sunlightShape.lineTo(0.10, -0.05);
+sunlightShape.lineTo(-2.05, -3.35);
+sunlightShape.lineTo(-2.35, -3.35);
+sunlightShape.closePath();
+
+const sunlightGeometry = new THREE.ShapeGeometry(sunlightShape);
+
+const sunlightMaterial = new THREE.MeshBasicMaterial({
+    color: 0xf5d98a,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    side: THREE.DoubleSide
+});
+
+const sunlightBeam = new THREE.Mesh(
+    sunlightGeometry,
+    sunlightMaterial
+);
+
+sunlightBeam.position.z = -0.05;
+sunlightGroup.add(sunlightBeam);
+
+// Sun halo
+const sunHaloMaterial = new THREE.MeshBasicMaterial({
+    color: 0xf5d98a,
+    transparent: true,
+    opacity: 0.04,
+    depthWrite: false
+});
+
+const sunHalo = new THREE.Mesh(
+    new THREE.CircleGeometry(0.36, 48),
+    sunHaloMaterial
+);
+
+sunlightGroup.add(sunHalo);
+
+// Sun core
+const sunCoreMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffdf78,
+    transparent: true,
+    opacity: 0.12
+});
+
+const sunCore = new THREE.Mesh(
+    new THREE.CircleGeometry(0.20, 48),
+    sunCoreMaterial
+);
+
+sunCore.position.z = 0.03;
+sunlightGroup.add(sunCore);
+
+// Sun rays
+const sunRays = new THREE.Group();
+sunRays.position.z = 0.02;
+sunlightGroup.add(sunRays);
+
+const sunRaysMaterial = new THREE.MeshBasicMaterial({
+    color: 0xe8c96f,
+    transparent: true,
+    opacity: 0.08
+});
+
+for (let i = 0; i < 12; i++) {
+    const ray = new THREE.Mesh(
+        new THREE.BoxGeometry(0.018, 0.09, 0.01),
+        sunRaysMaterial
+    );
+
+    const angle = (i / 12) * Math.PI * 2;
+
+    ray.position.set(
+        Math.cos(angle) * 0.29,
+        Math.sin(angle) * 0.29,
+        0
+    );
+
+    ray.rotation.z = angle;
+    sunRays.add(ray);
+}
+
+// =========================
+// WATERING CAN — COMPLETE MODEL
+// =========================
+
+const wateringCan = new THREE.Group();
+scene.add(wateringCan);
+
+const canMaterial = new THREE.MeshBasicMaterial({
+    color: 0x65a99b
+});
+
+const darkOpeningMaterial = new THREE.MeshBasicMaterial({
+    color: 0x315e57
+});
+
+// Main body
+const canBody = new THREE.Mesh(
+    new THREE.SphereGeometry(0.23, 32, 24),
+    canMaterial
+);
+canBody.scale.set(1.25, 0.9, 0.82);
+wateringCan.add(canBody);
+
+// Top neck
+const canNeck = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.075, 0.09, 0.10, 24),
+    canMaterial
+);
+canNeck.position.set(0.02, 0.205, 0);
+wateringCan.add(canNeck);
+
+// Top opening
+const canOpening = new THREE.Mesh(
+    new THREE.CircleGeometry(0.068, 24),
+    darkOpeningMaterial
+);
+canOpening.rotation.x = -Math.PI / 2;
+canOpening.position.set(0.02, 0.258, 0);
+wateringCan.add(canOpening);
+
+// Handle
+const canHandle = new THREE.Mesh(
+    new THREE.TorusGeometry(0.17, 0.027, 12, 32),
+    canMaterial
+);
+canHandle.position.set(0.245, 0.015, -0.015);
+canHandle.scale.set(0.9, 1, 1);
+wateringCan.add(canHandle);
+
+// Function to create a tapered tube between two points
+function addCanTube(startPoint, endPoint, startRadius, endRadius) {
+    const direction = new THREE.Vector3()
+        .subVectors(endPoint, startPoint);
+
+    const length = direction.length();
+
+    const geometry = new THREE.CylinderGeometry(
+        endRadius,
+        startRadius,
+        length,
+        20
+    );
+
+    const mesh = new THREE.Mesh(geometry, canMaterial);
+
+    mesh.position.copy(startPoint)
+        .add(endPoint)
+        .multiplyScalar(0.5);
+
+    mesh.quaternion.setFromUnitVectors(
+        new THREE.Vector3(0, 1, 0),
+        direction.normalize()
+    );
+
+    wateringCan.add(mesh);
+    return mesh;
+}
+
+// Spout
+const spoutStart = new THREE.Vector3(-0.19, -0.015, 0);
+const nozzleTip = new THREE.Vector3(-0.64, -0.34, 0);
+
+addCanTube(spoutStart, nozzleTip, 0.075, 0.035);
+
+// Nozzle rim
+const nozzleDirection = new THREE.Vector3()
+    .subVectors(nozzleTip, spoutStart)
+    .normalize();
+
+const nozzleRim = new THREE.Mesh(
+    new THREE.TorusGeometry(0.036, 0.009, 8, 20),
+    canMaterial
+);
+
+nozzleRim.position.copy(nozzleTip);
+
+nozzleRim.quaternion.setFromUnitVectors(
+    new THREE.Vector3(0, 0, 1),
+    nozzleDirection
+);
+
+wateringCan.add(nozzleRim);
+
+// Dark nozzle opening
+const nozzleHole = new THREE.Mesh(
+    new THREE.CircleGeometry(0.027, 20),
+    darkOpeningMaterial
+);
+
+nozzleHole.position.copy(nozzleTip);
+nozzleHole.quaternion.copy(nozzleRim.quaternion);
+nozzleHole.position.addScaledVector(nozzleDirection, 0.001);
+
+wateringCan.add(nozzleHole);
+
+// Position of watering can
+wateringCan.position.set(1.35, 0.35, 0.45);
+wateringCan.rotation.set(0, 0, 0);
+wateringCan.scale.setScalar(0.8);
+wateringCan.visible = false;
+
+
+// =========================
+// WATER DROPS AND SPLASHES
+// =========================
+
+const waterDrops = [];
+
+const waterDropGeometry = new THREE.SphereGeometry(
+    0.018, 10, 8
+);
+
+const waterDropMaterial = new THREE.MeshBasicMaterial({
+    color: 0x8edcf0,
+    transparent: true,
+    opacity: 0.9,
+    depthWrite: false
+});
+
+// Create falling water drops
+for (let i = 0; i < 36; i++) {
+    const drop = new THREE.Mesh(
+        waterDropGeometry,
+        waterDropMaterial
+    );
+
+    drop.visible = false;
+    drop.scale.set(0.8, 1.5, 0.8);
+    drop.userData.velocity = new THREE.Vector3();
+    drop.userData.life = 0;
+
+    scene.add(drop);
+    waterDrops.push(drop);
+}
+
+// Splash particles
+const waterSplashes = [];
+
+const splashGeometry = new THREE.SphereGeometry(
+    0.009, 8, 6
+);
+
+const splashMaterial = new THREE.MeshBasicMaterial({
+    color: 0x9be5f4,
+    transparent: true,
+    opacity: 0.9,
+    depthWrite: false
+});
+
+for (let i = 0; i < 24; i++) {
+    const particle = new THREE.Mesh(
+        splashGeometry,
+        splashMaterial
+    );
+
+    particle.visible = false;
+    particle.userData.velocity = new THREE.Vector3();
+    particle.userData.life = 0;
+
+    scene.add(particle);
+    waterSplashes.push(particle);
+}
+
+const wateringTarget = new THREE.Vector3(0, -1.42, 0.05);
+
+let waterPourTimer = 0;
+let waterSpawnTimer = 0;
+
+
+// Find the upper surface of the elliptical soil.
+function getSoilSurfaceY(x, z) {
+
+    const localX = (x - soil.position.x) / soil.scale.x;
+    const localZ = (z - soil.position.z) / soil.scale.z;
+
+    const distanceSquared =
+        localX * localX + localZ * localZ;
+
+    if (distanceSquared > 1) {
+        return null;
+    }
+
+    const surfaceHeight = Math.sqrt(
+        Math.max(0, 1 - distanceSquared)
+    );
+
+    return soil.position.y + soil.scale.y * surfaceHeight;
+}
+
+
+// Create a splash when a drop touches the soil.
+function spawnWaterSplash(position) {
+
+    for (let i = 0; i < 4; i++) {
+
+        const particle = waterSplashes.find(
+            item => !item.visible
+        );
+
+        if (!particle) return;
+
+        particle.position.copy(position);
+
+        particle.userData.velocity.set(
+            (Math.random() - 0.5) * 1.2,
+            0.5 + Math.random() * 0.8,
+            (Math.random() - 0.5) * 0.8
+        );
+
+        particle.userData.life =
+            0.25 + Math.random() * 0.15;
+
+        particle.scale.setScalar(
+            0.7 + Math.random() * 0.6
+        );
+
+        particle.visible = true;
+    }
+}
+
+
+// Create a water drop at the nozzle tip.
+function spawnWaterDrop() {
+
+    const drop = waterDrops.find(
+        item => !item.visible
+    );
+
+    if (!drop) return;
+
+    const startPosition = wateringCan.localToWorld(
+        nozzleTip.clone()
+    );
+
+    drop.position.copy(startPosition);
+
+    const direction = new THREE.Vector3()
+        .subVectors(wateringTarget, startPosition)
+        .normalize();
+
+    direction.x += (Math.random() - 0.5) * 0.12;
+    direction.z += (Math.random() - 0.5) * 0.08;
+
+    direction.normalize();
+
+    drop.userData.velocity.copy(direction)
+        .multiplyScalar(2.8 + Math.random() * 0.35);
+
+    drop.userData.life = 1.5;
+    drop.visible = true;
+}
+
+
+// Update the watering can, drops, splashes and soil.
+function updateWaterAnimation(delta) {
+
+    // Smoothly tilt the watering can while pouring.
+    if (waterPourTimer > 0) {
+
+        waterPourTimer = Math.max(
+            0,
+            waterPourTimer - delta
+        );
+
+        waterSpawnTimer += delta;
+
+        while (waterSpawnTimer >= 0.065) {
+            spawnWaterDrop();
+            waterSpawnTimer -= 0.065;
+        }
+
+    } else {
+        waterSpawnTimer = 0;
+    }
+
+    const targetTilt = waterPourTimer > 0 ? 0.22 : 0;
+
+    wateringCan.rotation.z = THREE.MathUtils.damp(
+        wateringCan.rotation.z,
+        targetTilt,
+        5,
+        delta
+    );
+
+    wateringCan.visible =
+        waterPourTimer > 0 ||
+        Math.abs(wateringCan.rotation.z) > 0.01;
+
+
+    // Update falling water drops.
+    for (const drop of waterDrops) {
+
+        if (!drop.visible) continue;
+
+        drop.userData.life -= delta;
+
+        drop.position.addScaledVector(
+            drop.userData.velocity,
+            delta
+        );
+
+        drop.userData.velocity.y -= 1.6 * delta;
+
+        const surfaceY = getSoilSurfaceY(
+            drop.position.x,
+            drop.position.z
+        );
+
+        // A splash happens only when the drop hits the soil.
+        if (
+            surfaceY !== null &&
+            drop.position.y <= surfaceY
+        ) {
+
+            const impactPosition = drop.position.clone();
+            impactPosition.y = surfaceY + 0.005;
+
+            drop.visible = false;
+
+            spawnWaterSplash(impactPosition);
+
+            soilWetness = Math.min(
+                1,
+                soilWetness + 0.035
+            );
+
+            continue;
+        }
+
+        if (drop.userData.life <= 0) {
+            drop.visible = false;
+        }
+    }
+
+
+    // Update splash particles.
+    for (const particle of waterSplashes) {
+
+        if (!particle.visible) continue;
+
+        particle.userData.life -= delta;
+
+        particle.position.addScaledVector(
+            particle.userData.velocity,
+            delta
+        );
+
+        particle.userData.velocity.y -= 3.0 * delta;
+
+        if (particle.userData.life <= 0) {
+            particle.visible = false;
+        }
+    }
+
+
+    // Gradually dry the soil after watering.
+    soilWetness = Math.max(
+        0,
+        soilWetness - delta * 0.012
+    );
+
+    soilMaterial.color
+        .copy(drySoilColor)
+        .lerp(wetSoilColor, soilWetness);
+}
 // =========================
 // PLANT STATE
 // =========================
@@ -740,10 +1226,18 @@ document.getElementById('water-value').textContent = water + '%';
 document.getElementById('light-value').textContent = light + '%';
 
 waterInput.addEventListener('input', () => {
+    const previousWater = water;
+
     water = Number(waterInput.value);
 
     document.getElementById('water-value').textContent =
         water + '%';
+
+    // Start the watering animation when water increases.
+    if (water > previousWater) {
+    waterPourTimer = 3.5;
+    wateringCan.visible = true;
+    }
 
     if (seedIsPlanted && water >= 50) {
         germinationStarted = true;
@@ -962,6 +1456,49 @@ function animate() {
     requestAnimationFrame(animate);
 
     const delta = Math.min(clock.getDelta(), 0.05);
+    updateWaterAnimation(delta);
+
+    // Smooth sunlight intensity based on the Light slider.
+const targetLightStrength = THREE.MathUtils.clamp(
+    light / 100,
+    0,
+    1
+);
+
+lightVisualStrength = THREE.MathUtils.damp(
+    lightVisualStrength,
+    targetLightStrength,
+    2.5,
+    delta
+    );
+
+    // Sun brightness
+    sunCoreMaterial.opacity =
+    0.12 + lightVisualStrength * 0.88;
+
+    // Soft halo
+    sunHaloMaterial.opacity =
+    0.04 + lightVisualStrength * 0.30;
+
+    sunlightMaterial.opacity =
+    lightVisualStrength * 0.18;
+
+   
+    // Sun rays
+    sunRaysMaterial.opacity =
+    0.08 + lightVisualStrength * 0.65;
+
+    // Gentle pulsing glow
+    const sunPulse =
+    1 + Math.sin(clock.elapsedTime * 2) *
+    0.045 * lightVisualStrength;
+
+    sunHalo.scale.setScalar(sunPulse);
+
+    // Slowly rotate the rays
+    sunRays.rotation.z =
+    Math.sin(clock.elapsedTime * 0.35) *
+    0.06 * lightVisualStrength;
 
     // The plant slowly consumes water after it is planted.
     if (seedIsPlanted && water > 0) {
